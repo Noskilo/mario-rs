@@ -13,3 +13,10 @@ pub struct Transform {
     pub rotation: f32,
     pub scale: f32,
 }
+
+
+#[derive(Clone, Copy, Debug)]
+pub struct RigidBody {
+    pub velocity: Vector2<f32>,
+    pub bounding_box: Rect
+}

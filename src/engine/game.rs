@@ -1,5 +1,5 @@
 use crate::components::Transform;
-use crate::components::Visual;
+use crate::components::{RigidBody, Visual};
 use crate::engine::global_resources::DeltaTime;
 use crate::engine::global_resources::Renderable;
 use crate::engine::resource_manager::ResourceManager;
@@ -9,7 +9,7 @@ use sdl2::video::WindowContext;
 use crate::engine::resource_manager::TextureManager;
 use crate::{
     engine::global_resources::InputEvents,
-    systems::{PlayerControlSystem, RenderObjects},
+    systems::{Physics, PlayerControlSystem, RenderObjects},
 };
 use legion::prelude::{Resources, Schedule, Universe};
 use sdl2::render::{Canvas, Texture};
@@ -151,10 +151,12 @@ impl<'a> Game {
 
         let input_system = PlayerControlSystem::build();
         let render_objects = RenderObjects::build();
+        let physics = Physics::build();
 
         let mut schedule = Schedule::builder()
             .add_system(input_system)
             .add_system(render_objects)
+            .add_system(physics)
             .flush()
             .build();
 
@@ -174,12 +176,13 @@ impl<'a> Game {
                 texture_id: mario.to_string(),
                 src_rect: Rect::new(32, 0, 32, 32),
             },
+            RigidBody {
+                velocity: Vector2::new(0f32, 0f32),
+                bounding_box: Rect::new(0, 0, 32, 32),
+            },
         )];
 
-        world.insert(
-            (),
-            components,
-        );
+        world.insert((), components);
 
         let target_time: u128 = 1_000_000_000 / TARGET_FPS;
 
