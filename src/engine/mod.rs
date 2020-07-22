@@ -1,3 +1,4 @@
 pub mod game;
-pub mod global_resources;
-pub mod resource_manager;
+pub mod resources;
+pub mod scene_manager;
+pub mod camera;

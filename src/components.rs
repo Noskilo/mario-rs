@@ -1,8 +1,6 @@
 use ggez::{
-    graphics,
-    mint::{Point2, Vector2},
+    graphics, nalgebra::{Point2, Vector2},
 };
-use graphics::spritebatch::SpriteBatch;
 use specs::Component;
 use specs::VecStorage;
 
@@ -11,6 +9,10 @@ pub struct Transform {
     pub position: Point2<f32>,
     pub rotation: f32,
     pub scale: Vector2<f32>,
+}
+
+impl Component for Transform {
+    type Storage = VecStorage<Self>;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -22,15 +24,4 @@ pub struct Sprite {
 
 impl Component for Sprite {
     type Storage = VecStorage<Self>;
-}
-
-impl Sprite {
-    pub fn draw(&self, batch: &mut SpriteBatch, transform: &Transform) {
-        batch.add(
-            graphics::DrawParam::new()
-                .src(self.src)
-                .scale(transform.scale)
-                .dest(transform.position),
-        );
-    }
 }
