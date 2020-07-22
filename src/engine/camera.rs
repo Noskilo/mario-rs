@@ -38,7 +38,6 @@ impl Camera {
         self.position.x = self.position.x.lerp(self.target_position.x, ratio);
         self.position.y = self.position.y.lerp(self.target_position.y, ratio);
 
-        println!("{:?}", self.position);
         self.zoom = self.zoom.lerp(self.target_zoom, ratio);
     }
 }

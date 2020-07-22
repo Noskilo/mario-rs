@@ -48,6 +48,7 @@ pub struct Scene<'a, 'b> {
 
 impl<'a, 'b> Scene<'a, 'b> {
     pub fn new(mut world: World, mut dispatcher: Dispatcher<'a, 'b>) -> Self {
+        world.insert(DeltaTime(0.0));
         world.insert(Renderables::default());
         world.insert(Camera::default());
         world.insert(InputEvents::default());

@@ -9,6 +9,8 @@ use ggez::{event::EventHandler, graphics, nalgebra::Point2, timer, Context, Game
 use graphics::{FilterMode, Rect};
 use specs::{Builder, DispatcherBuilder, World, WorldExt};
 
+pub const TARGET_FPS: u32 = 60;
+
 pub struct SuperMario<'a, 'b> {
     pub is_running: bool,
     scene_manager: SceneManager<'a, 'b>,
@@ -45,7 +47,11 @@ impl<'a, 'b> SuperMario<'a, 'b> {
 
 impl<'a, 'b> EventHandler for SuperMario<'a, 'b> {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
-        self.scene_manager.update(ctx)?;
+
+        while timer::check_update_time(ctx, TARGET_FPS) {
+            self.scene_manager.update(ctx)?;
+        }
+    
         Ok(())
     }
 

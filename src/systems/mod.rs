@@ -91,8 +91,12 @@
 
 use crate::components::Sprite;
 use crate::components::Transform;
-use crate::engine::{camera::Camera, resources::{InputEvents, Renderables, DeltaTime}};
-use ggez::{event::KeyCode, graphics, Context, nalgebra::Point2};
+use crate::engine::{
+    camera::Camera,
+    game::TARGET_FPS,
+    resources::{DeltaTime, InputEvents, Renderables},
+};
+use ggez::{event::KeyCode, graphics, nalgebra::Point2, Context};
 use specs::prelude::*;
 use specs::{Read, ReadStorage, System, Write, WriteStorage};
 
@@ -111,7 +115,7 @@ impl<'a> System<'a> for RenderingSystem<'a> {
         ReadStorage<'a, Sprite>,
         ReadStorage<'a, Transform>,
         Write<'a, Renderables>,
-        Read<'a, Camera>
+        Read<'a, Camera>,
     );
 
     fn run(&mut self, (sprite, transform, mut renderables, camera): Self::SystemData) {
@@ -122,8 +126,12 @@ impl<'a> System<'a> for RenderingSystem<'a> {
                 .src(sprite.src)
                 .offset(Point2::new(0.5, 0.5))
                 .scale(transform.scale)
-                .dest(Point2::new((transform.position.x - camera.position.x - sprite.width / 2.0) + width / (2.0 * camera.zoom), 
-                (transform.position.y - camera.position.y - sprite.height / 2.0) + height / (2.0 * camera.zoom)));
+                .dest(Point2::new(
+                    (transform.position.x - camera.position.x - sprite.width / 2.0)
+                        + width / (2.0 * camera.zoom),
+                    (transform.position.y - camera.position.y - sprite.height / 2.0)
+                        + height / (2.0 * camera.zoom),
+                ));
 
             renderables.0.push_back(draw_param);
         }
@@ -133,26 +141,29 @@ impl<'a> System<'a> for RenderingSystem<'a> {
 pub struct PlayerControlSystem;
 
 impl<'a> System<'a> for PlayerControlSystem {
-    type SystemData = (WriteStorage<'a, Transform>, Read<'a, InputEvents>, Read<'a, DeltaTime>, Write<'a, Camera>);
+    type SystemData = (
+        WriteStorage<'a, Transform>,
+        Read<'a, InputEvents>,
+        Write<'a, Camera>,
+    );
 
-    fn run(&mut self, (mut transform, input_events, delta_time, mut camera): Self::SystemData) {
-        let speed = (100.0 * delta_time.0) as f32;
+    fn run(&mut self, (mut transform, input_events, mut camera): Self::SystemData) {
+        let speed = (100.0 * 1.0 / TARGET_FPS as f32) as f32;
         for trans in (&mut transform).join() {
             if input_events.pressed_keys.contains(&KeyCode::D) {
                 // println!("Jump");
                 trans.position.x += speed;
-                camera.set_target(trans.position);
             } else if input_events.pressed_keys.contains(&KeyCode::A) {
                 trans.position.x -= speed;
             }
             if input_events.pressed_keys.contains(&KeyCode::W) {
                 // println!("Jump");
                 trans.position.y -= speed;
-    
             } else if input_events.pressed_keys.contains(&KeyCode::S) {
                 trans.position.y += speed;
             }
 
+            camera.set_target(trans.position);
         }
     }
 }
