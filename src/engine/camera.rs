@@ -5,6 +5,8 @@ use ggez::{
 };
 
 use crate::util::lerp::Lerp;
+use graphics::{DrawParam, Mesh};
+use std::collections::VecDeque;
 
 pub struct Camera {
     pub position: Point2<f32>,
@@ -24,6 +26,25 @@ impl Camera {
         Ok(())
     }
 
+    pub fn debug_render(
+        &self,
+        ctx: &mut Context,
+        debug_renderables: &mut VecDeque<Mesh>,
+    ) -> GameResult<()> {
+        while !debug_renderables.is_empty() {
+            let mesh = debug_renderables.pop_front().unwrap();
+            graphics::draw(
+                ctx,
+                &mesh,
+                DrawParam::default()
+                    .offset(Point2::new(0.5, 0.5))
+                    .scale(Vector2::new(self.zoom, self.zoom)),
+            )?;
+        }
+
+        Ok(())
+    }
+
     pub fn set_target(&mut self, position: Point2<f32>) {
         self.target_position = position;
     }
@@ -33,7 +54,7 @@ impl Camera {
     }
 
     pub fn update(&mut self) {
-        let ratio = 0.1;
+        let ratio = 0.3;
 
         self.position.x = self.position.x.lerp(self.target_position.x, ratio);
         self.position.y = self.position.y.lerp(self.target_position.y, ratio);

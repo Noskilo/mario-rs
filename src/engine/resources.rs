@@ -1,6 +1,6 @@
 use ggez::{
     event::{KeyCode, KeyMods},
-    graphics::DrawParam,
+    graphics::{Mesh, DrawParam},
 };
 use std::collections::{vec_deque::VecDeque, HashSet};
 
@@ -9,6 +9,9 @@ pub struct DeltaTime(pub f64);
 
 #[derive(Default)]
 pub struct Renderables(pub VecDeque<DrawParam>);
+
+#[derive(Default)]
+pub struct DebugRenderables(pub VecDeque<Mesh>);
 
 #[derive(Default)]
 pub struct InputEvents {

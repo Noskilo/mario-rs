@@ -1,13 +1,19 @@
 use super::{
     camera::Camera,
-    resources::{DeltaTime, InputEvents, Renderables},
+    resources::{DeltaTime, InputEvents, Renderables, DebugRenderables},
 };
 use ggez::error::GameResult;
 
 use crate::systems::RenderingSystem;
-use ggez::{event::KeyCode, graphics::spritebatch::SpriteBatch, input::keyboard, timer, Context};
+use ggez::{
+    event::KeyCode,
+    graphics::{spritebatch::SpriteBatch, MeshBuilder, self},
+    input::keyboard,
+    timer, Context, nalgebra::Point2,
+};
 use specs::Dispatcher;
 use specs::{RunNow, World, WorldExt};
+use graphics::DrawParam;
 
 pub struct SceneManager<'a, 'b> {
     scenes: Vec<Box<Scene<'a, 'b>>>,
@@ -52,6 +58,7 @@ impl<'a, 'b> Scene<'a, 'b> {
         world.insert(Renderables::default());
         world.insert(Camera::default());
         world.insert(InputEvents::default());
+        world.insert(DebugRenderables::default());
 
         dispatcher.setup(&mut world);
         Self { world, dispatcher }
@@ -71,7 +78,7 @@ impl<'a, 'b> Scene<'a, 'b> {
         }
 
         self.dispatcher.dispatch(&self.world);
-
+        self.world.maintain();
         Ok(())
     }
 
@@ -82,7 +89,9 @@ impl<'a, 'b> Scene<'a, 'b> {
             render_system.run_now(&self.world);
         }
 
+
         let mut renderables = self.world.write_resource::<Renderables>();
+        let mut debug_renderables = self.world.write_resource::<DebugRenderables>();
         let cam = self.world.read_resource::<Camera>();
 
         while !renderables.0.is_empty() {
@@ -91,6 +100,9 @@ impl<'a, 'b> Scene<'a, 'b> {
         }
 
         cam.render(ctx, batch)?;
+        cam.debug_render(ctx, &mut debug_renderables.0)?;
+
+
 
         Ok(())
     }

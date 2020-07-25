@@ -1,11 +1,16 @@
 use super::scene_manager::Scene;
 use crate::{
-    components::{Sprite, Transform},
+    components::{Sprite, Transform, DynamicBody, StaticBody, CameraTarget, Player},
     engine::scene_manager::SceneManager,
-    entities::Mario,
-    systems::{PlayerControlSystem, RenderingSystem},
+    entities::{Brick, Mario},
+    systems::{PlayerControlSystem, PhysicsSystem, CameraSystem},
 };
-use ggez::{event::EventHandler, graphics, nalgebra::Point2, timer, Context, GameResult};
+use ggez::{
+    event::EventHandler,
+    graphics,
+    nalgebra::{Point2, Vector2},
+    timer, Context, GameResult,
+};
 use graphics::{FilterMode, Rect};
 use specs::{Builder, DispatcherBuilder, World, WorldExt};
 
@@ -22,15 +27,26 @@ impl<'a, 'b> SuperMario<'a, 'b> {
         let mut world = World::new();
         world.register::<Transform>();
         world.register::<Sprite>();
+        world.register::<DynamicBody>();
+        world.register::<StaticBody>();
+        world.register::<CameraTarget>();
+        world.register::<Player>();
 
         Mario::add(&mut world, Point2::new(0.0, 0.0));
 
+        for i in 0..100 {
+            Brick::add(&mut world, Point2::new(i as f32 * 16f32, 30.0));
+        }
+    
+
         let dispatcher = DispatcherBuilder::new()
             .with(PlayerControlSystem, "PlayerControlSystem", &[])
+            .with(PhysicsSystem, "PhysicsSystem", &[])
+            .with(CameraSystem, "CameraSystem", &[])
             .build();
         let first_scene = Scene::new(world, dispatcher);
 
-        let image = graphics::Image::new(ctx, "/textures/mario.png").unwrap();
+        let image = graphics::Image::new(ctx, "/textures.png").unwrap();
 
         let mut batch = graphics::spritebatch::SpriteBatch::new(image);
         batch.set_filter(FilterMode::Nearest);
@@ -47,11 +63,10 @@ impl<'a, 'b> SuperMario<'a, 'b> {
 
 impl<'a, 'b> EventHandler for SuperMario<'a, 'b> {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
-
         while timer::check_update_time(ctx, TARGET_FPS) {
             self.scene_manager.update(ctx)?;
         }
-    
+
         Ok(())
     }
 
