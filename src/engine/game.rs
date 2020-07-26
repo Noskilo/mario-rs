@@ -13,7 +13,7 @@ use ggez::{
 };
 use graphics::{FilterMode, Rect};
 use specs::{Builder, DispatcherBuilder, World, WorldExt};
-use crate::components::Animation;
+use crate::components::{FeetSensor, Animation};
 use crate::systems::AnimationSystem;
 
 pub const TARGET_FPS: u32 = 60;
@@ -34,6 +34,7 @@ impl<'a, 'b> SuperMario<'a, 'b> {
         world.register::<CameraTarget>();
         world.register::<Player>();
         world.register::<Animation>();
+        world.register::<FeetSensor>();
 
 
         Mario::add(&mut world, Point2::new(0.0, 0.0), &mut physics_world);

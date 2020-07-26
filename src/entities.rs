@@ -1,5 +1,6 @@
 use crate::components::{
-    Animation, AnimationParams, AnimationStates, Body, CameraTarget, Player, Sprite, Transform,
+    Animation, AnimationParams, AnimationStates, Body, CameraTarget, FeetSensor, Player, Sprite,
+    Transform,
 };
 use crate::engine::physics::PhysicsWorld;
 use ggez::graphics::Rect;
@@ -24,6 +25,7 @@ impl Mario {
         let rigid_body = RigidBodyDesc::new()
             .position(Isometry2::new(Vector2::new(position.x, position.y), 0.0))
             .mass(1.0)
+            .max_linear_velocity(250.0)
             .build();
 
         let shape = ShapeHandle::new(Ball::new(8.0));
@@ -31,6 +33,11 @@ impl Mario {
             ColliderDesc::new(shape).material(MaterialHandle::new(BasicMaterial::new(0.0, 0.2)));
 
         let body = physics_world.insert_body(rigid_body, collider_desc);
+
+        let rect_shape = ShapeHandle::new(Cuboid::new(Vector2::<f32>::new(8.0, 1.0)));
+        let sensor_desc = ColliderDesc::new(rect_shape).translation(Vector2::new(0.0, -8.0)).user_data("feet");
+
+        let sensor_handle = physics_world.insert_sensor(&body.rigid_body_handle, sensor_desc);
 
         let mut animation = Animation::default();
 
@@ -88,6 +95,10 @@ impl Mario {
             .with(CameraTarget::default())
             .with(body)
             .with(animation)
+            .with(FeetSensor {
+                collider_handle: sensor_handle,
+                on_floor: false
+            })
             .build()
     }
 }
@@ -108,7 +119,7 @@ impl Brick {
         let shape = ShapeHandle::new(Cuboid::new(Vector2::new(8.0, 8.0)));
         let collider_desc = ColliderDesc::new(shape)
             .density(100.0)
-            .material(MaterialHandle::new(BasicMaterial::new(0.0, 0.8)));
+            .material(MaterialHandle::new(BasicMaterial::new(0.0, 0.8))).user_data("brick");
 
         let body = physics_world.insert_body(rigid_body, collider_desc);
 

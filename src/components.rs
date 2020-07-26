@@ -21,6 +21,16 @@ impl Component for Body {
 }
 
 #[derive(Clone, Copy, Debug)]
+pub struct FeetSensor {
+    pub collider_handle: DefaultColliderHandle,
+    pub on_floor: bool
+}
+
+impl Component for FeetSensor {
+    type Storage = VecStorage<Self>;
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct Transform {
     pub position: Point2<f32>,
     pub rotation: f32,
