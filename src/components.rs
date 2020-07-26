@@ -1,12 +1,23 @@
 use ggez::{
     graphics,
-    nalgebra::{Point2, Vector2},
+    nalgebra::{Point2},
 };
+use nphysics2d::nalgebra::base::Vector2;
 use specs::Component;
 use specs::{NullStorage, VecStorage};
 
-pub trait Body {
-    fn get_bounding_box(&self, transform: &Transform) -> graphics::Rect;
+use nphysics2d::object::{DefaultBodyHandle, DefaultColliderHandle};
+use std::collections::HashMap;
+
+
+#[derive(Clone, Copy, Debug)]
+pub struct Body {
+    pub rigid_body_handle: DefaultBodyHandle,
+    pub collider_handle: DefaultColliderHandle,
+}
+
+impl Component for Body {
+    type Storage = VecStorage<Self>;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -31,57 +42,37 @@ impl Component for Sprite {
     type Storage = VecStorage<Self>;
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct DynamicBody {
-    pub velocity: Vector2<f32>,
-    pub width: f32,
-    pub height: f32,
+#[derive(Clone, Debug, Default)]
+pub struct Animation {
+    pub current_state: AnimationStates,
+    pub animations: HashMap<AnimationStates, AnimationParams>,
 }
 
-impl Component for DynamicBody {
+impl Component for Animation {
     type Storage = VecStorage<Self>;
 }
 
-impl Body for DynamicBody {
-    fn get_bounding_box(&self, transform: &Transform) -> graphics::Rect {
-        let (width, height) = (
-            self.width * transform.scale.x,
-            self.height * transform.scale.y,
-        );
+#[derive(Clone, Copy, Debug, Default)]
+pub struct AnimationParams {
+    pub frame: f32,
+    pub speed: f32,
+    pub start_frame: u32,
+    pub frame_count: u32,
+}
 
-        graphics::Rect::new(
-            transform.position.x - width / 2.0,
-            transform.position.y - height,
-            width,
-            height,
-        )
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum AnimationStates {
+    Idle,
+    Moving,
+    Jumping,
+}
+
+impl Default for AnimationStates {
+    fn default() -> Self {
+        AnimationStates::Idle
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct StaticBody {
-    pub width: f32,
-    pub height: f32,
-}
-
-impl Component for StaticBody {
-    type Storage = VecStorage<Self>;
-}
-
-impl Body for StaticBody {
-    fn get_bounding_box(&self, transform: &Transform) -> graphics::Rect {
-        let (width, height) = (
-            self.width * transform.scale.x,
-            self.height * transform.scale.y,
-        );
-        graphics::Rect::new(
-            transform.position.x - width / 2.0,
-            transform.position.y - height,
-            width,
-            height,
-        )
-    }
-}
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CameraTarget;

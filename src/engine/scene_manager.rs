@@ -1,19 +1,22 @@
 use super::{
     camera::Camera,
-    resources::{DeltaTime, InputEvents, Renderables, DebugRenderables},
+    physics::PhysicsWorld,
+    resources::{DebugRenderables, DeltaTime, InputEvents, Renderables},
 };
 use ggez::error::GameResult;
 
 use crate::systems::RenderingSystem;
 use ggez::{
     event::KeyCode,
-    graphics::{spritebatch::SpriteBatch, MeshBuilder, self},
+    graphics::{self, spritebatch::SpriteBatch, MeshBuilder},
     input::keyboard,
-    timer, Context, nalgebra::Point2,
+    nalgebra::Point2,
+    timer, Context,
 };
-use specs::Dispatcher;
-use specs::{RunNow, World, WorldExt};
 use graphics::DrawParam;
+use specs::{Dispatcher, Join};
+use specs::{RunNow, World, WorldExt};
+use crate::components::Body;
 
 pub struct SceneManager<'a, 'b> {
     scenes: Vec<Box<Scene<'a, 'b>>>,
@@ -53,15 +56,24 @@ pub struct Scene<'a, 'b> {
 }
 
 impl<'a, 'b> Scene<'a, 'b> {
-    pub fn new(mut world: World, mut dispatcher: Dispatcher<'a, 'b>) -> Self {
+    pub fn new(
+        mut world: World,
+        mut dispatcher: Dispatcher<'a, 'b>,
+        mut physics_world: PhysicsWorld,
+    ) -> Self {
         world.insert(DeltaTime(0.0));
         world.insert(Renderables::default());
         world.insert(Camera::default());
         world.insert(InputEvents::default());
         world.insert(DebugRenderables::default());
+        world.insert(physics_world);
+
 
         dispatcher.setup(&mut world);
-        Self { world, dispatcher }
+        Self {
+            world,
+            dispatcher,
+        }
     }
 
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
@@ -73,6 +85,7 @@ impl<'a, 'b> Scene<'a, 'b> {
 
             cam.update();
 
+            input_events.repeated_keys = input_events.pressed_keys.clone();
             input_events.active_mods = keyboard::active_mods(ctx);
             input_events.pressed_keys = keyboard::pressed_keys(ctx).clone();
         }
@@ -89,7 +102,6 @@ impl<'a, 'b> Scene<'a, 'b> {
             render_system.run_now(&self.world);
         }
 
-
         let mut renderables = self.world.write_resource::<Renderables>();
         let mut debug_renderables = self.world.write_resource::<DebugRenderables>();
         let cam = self.world.read_resource::<Camera>();
@@ -101,8 +113,6 @@ impl<'a, 'b> Scene<'a, 'b> {
 
         cam.render(ctx, batch)?;
         cam.debug_render(ctx, &mut debug_renderables.0)?;
-
-
 
         Ok(())
     }

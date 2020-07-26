@@ -1,104 +1,17 @@
-// pub struct PlayerControlSystem;
-
-// impl PlayerControlSystem {
-//     pub fn build() -> Box<dyn Schedulable> {
-//         SystemBuilder::new("update_positions")
-//             .read_resource::<InputEvents>()
-//             .read_resource::<DeltaTime>()
-//             .with_query(<Write<RigidBody>>::query())
-//             .build(|_, world, (input_events, delta_time), query| {
-//                 let right = Keycode::D;
-//                 let left = Keycode::A;
-
-//                 let mut movement = Vector2::<f32>::new(0.0, 0.0);
-
-//                 let speed = (220.0 * delta_time.0) as f32;
-//                 let jump_force = (300.0 * delta_time.0) as f32;
-
-//                 if input_events.1.contains(&right) {
-//                     movement.x += speed;
-//                 } else if input_events.1.contains(&left) {
-//                     movement.x -= speed;
-//                 }
-
-//                 for event in input_events.0.iter() {
-//                     match event {
-//                         Event::KeyDown {
-//                             keycode: Some(Keycode::Space),
-//                             repeat: false,
-//                             ..
-//                         } => {
-//                             movement.y -= jump_force;
-//                         }
-//                         _ => (),
-//                     }
-//                 }
-
-//                 // if input_events.1.contains(&up) {
-//                 //     movement.y -= speed;
-//                 // } else if input_events.1.contains(&down) {
-//                 //     movement.y += speed;
-//                 // }
-
-//                 if movement.magnitude() != 0f32 {
-//                     for mut body in query.iter_mut(world) {
-//                         body.velocity.x = movement.x;
-//                         if movement.y < 0f32 {
-//                             body.velocity.y = movement.y;
-//                         }
-//                     }
-//                 }
-//             })
-//     }
-// }
-
-// pub struct RenderObjects;
-
-// impl RenderObjects {
-//     pub fn build() -> Box<dyn Schedulable> {
-//         SystemBuilder::new("render_objects")
-//             .write_resource::<Renderable>()
-//             .with_query(<(Read<Transform>, Read<Visual>)>::query())
-//             .build(|_, world, render_queue, query| {
-//                 for (trans, vis) in query.iter(world) {
-//                     render_queue
-//                         .0
-//                         .push_back((*trans, vis.src_rect, vis.texture_id.clone()));
-//                 }
-//             })
-//     }
-// }
-
-// pub struct Physics;
-
-// impl Physics {
-//     pub fn build() -> Box<dyn Schedulable> {
-//         SystemBuilder::new("physics")
-//             .read_resource::<DeltaTime>()
-//             .with_query(<(Write<Transform>, Write<RigidBody>)>::query())
-//             .build(|_, world, delta_time, query| {
-//                 for (mut trans, mut body) in query.iter_mut(&mut *world) {
-//                     body.velocity.y += 10f32 * delta_time.0 as f32;
-//                     trans.position += body.velocity;
-//                 }
-//             })
-//     }
-
-//     fn aabb(box1: &Rect, box2: &Rect) -> bool {
-//         box1.has_intersection(*box2)
-//     }
-// }
-
-use crate::components::Sprite;
-use crate::components::{Body, CameraTarget, DynamicBody, Player, StaticBody, Transform};
+use crate::components::{Sprite, Animation, AnimationStates};
+use crate::components::{Body, CameraTarget, Player, Transform};
 use crate::engine::{
     camera::Camera,
     game::TARGET_FPS,
+    physics::PhysicsWorld,
     resources::{DebugRenderables, DeltaTime, InputEvents, Renderables},
 };
-use ggez::{event::KeyCode, graphics, graphics::MeshBuilder, nalgebra::Point2, Context};
+use ggez::{event::KeyCode, graphics, graphics::MeshBuilder, nalgebra::{Point2, Vector2}, Context};
 use specs::prelude::*;
 use specs::{world::Index, Read, ReadStorage, System, Write, WriteStorage};
+use nphysics2d::algebra::{Force2, ForceType, Velocity2};
+use std::f32::consts::PI;
+
 
 pub struct RenderingSystem<'a> {
     ctx: &'a mut Context,
@@ -114,8 +27,6 @@ impl<'a> System<'a> for RenderingSystem<'a> {
     type SystemData = (
         ReadStorage<'a, Sprite>,
         ReadStorage<'a, Transform>,
-        ReadStorage<'a, DynamicBody>,
-        ReadStorage<'a, StaticBody>,
         Write<'a, Renderables>,
         Write<'a, DebugRenderables>,
         Read<'a, Camera>,
@@ -126,8 +37,6 @@ impl<'a> System<'a> for RenderingSystem<'a> {
         (
             sprite_storage,
             transform_storage,
-            dynamic_body_storage,
-            static_body_storage,
             mut renderables,
             mut debug_renderables,
             camera,
@@ -138,60 +47,18 @@ impl<'a> System<'a> for RenderingSystem<'a> {
         for (sprite, transform) in (&sprite_storage, &transform_storage).join() {
             let draw_param = graphics::DrawParam::new()
                 .src(sprite.src)
-                .scale(transform.scale)
+                .scale(Vector2::new(transform.scale.x, transform.scale.y))
                 .dest(Point2::new(
-                    (transform.position.x - camera.position.x - sprite.width / 2.0)
+                    (transform.position.x - camera.position.x)
                         + width / (2.0 * camera.zoom),
-                    (transform.position.y - camera.position.y - sprite.height / 2.0)
+                    (-transform.position.y + camera.position.y)
                         + height / (2.0 * camera.zoom),
-                ));
+                ))
+                .offset(Point2::new(0.5, 0.5))
+                .rotation(transform.rotation);
 
             renderables.0.push_back(draw_param);
         }
-
-        // for (transform, dynamic_body) in (&transform_storage, &dynamic_body_storage).join() {
-        //     let debug_rect = graphics::Rect::new(
-        //         (transform.position.x - camera.position.x - dynamic_body.width / 2.0)
-        //             + width / (2.0 * camera.zoom),
-        //         (transform.position.y - camera.position.y - dynamic_body.height / 2.0)
-        //             + height / (2.0 * camera.zoom),
-        //         dynamic_body.width,
-        //         dynamic_body.height,
-        //     );
-
-        //     let mesh = MeshBuilder::new()
-        //         .rectangle(
-        //             ggez::graphics::DrawMode::stroke(0.5),
-        //             debug_rect,
-        //             ggez::graphics::WHITE,
-        //         )
-        //         .build(self.ctx)
-        //         .unwrap();
-
-        //     debug_renderables.0.push_back(mesh);
-        // }
-
-        // for (transform, static_body) in (&transform_storage, &static_body_storage).join() {
-        //     let debug_rect = graphics::Rect::new(
-        //         (transform.position.x - camera.position.x - static_body.width / 2.0)
-        //             + width / (2.0 * camera.zoom),
-        //         (transform.position.y - camera.position.y - static_body.height / 2.0)
-        //             + height / (2.0 * camera.zoom),
-        //         static_body.width,
-        //         static_body.height,
-        //     );
-
-        //     let mesh = MeshBuilder::new()
-        //         .rectangle(
-        //             ggez::graphics::DrawMode::stroke(0.5),
-        //             debug_rect,
-        //             ggez::graphics::BLACK,
-        //         )
-        //         .build(self.ctx)
-        //         .unwrap();
-
-        //     debug_renderables.0.push_back(mesh);
-        // }
     }
 }
 
@@ -200,32 +67,44 @@ pub struct PlayerControlSystem;
 impl<'a> System<'a> for PlayerControlSystem {
     type SystemData = (
         WriteStorage<'a, Transform>,
-        WriteStorage<'a, DynamicBody>,
         Read<'a, InputEvents>,
         ReadStorage<'a, Player>,
+        ReadStorage<'a, Body>,
+        Write<'a, PhysicsWorld>
     );
 
     fn run(
         &mut self,
-        (mut transform_storage, mut body_storage, input_events, player): Self::SystemData,
+        (mut transform_storage, input_events, player, body_storage, mut physics_world): Self::SystemData,
     ) {
-        let speed = (100.0 * 1.0 / TARGET_FPS as f32) as f32;
-        for (trans, body, _) in (&mut transform_storage, &mut body_storage, &player).join() {
-            if input_events.pressed_keys.contains(&KeyCode::D)
-                || input_events.pressed_keys.contains(&KeyCode::Right)
-            {
-                trans.position.x += speed;
-            } else if input_events.pressed_keys.contains(&KeyCode::A)
-                || input_events.pressed_keys.contains(&KeyCode::Left)
-            {
-                trans.position.x -= speed;
-            }
-            if input_events.pressed_keys.contains(&KeyCode::W) {
-            } else if input_events.pressed_keys.contains(&KeyCode::S) {
-            }
+        let speed = (300.0 * 1.0 / TARGET_FPS as f32) as f32;
+        let mut force = Force2::linear(nphysics2d::nalgebra::Vector2::new(0.0, 0.0));
+        for (transform, body, _) in (&mut transform_storage, &body_storage, &player).join() {
+            let mut rigid_body = physics_world.bodies.get_mut(body.rigid_body_handle);
+            if let Some(rigid_body) = rigid_body {
+                if input_events.pressed_keys.contains(&KeyCode::D)
+                    || input_events.pressed_keys.contains(&KeyCode::Right)
+                {
+                    // rigid_body.apply_displacement(&[speed, 0.0, 0.0]);
+                    force.linear.x = speed;
+                    transform.scale.x = transform.scale.x.abs();
+                } else if input_events.pressed_keys.contains(&KeyCode::A)
+                    || input_events.pressed_keys.contains(&KeyCode::Left)
+                {
+                    // rigid_body.apply_displacement(&[-speed, 0.0, 0.0]);
+                    force.linear.x = -speed;
+                    transform.scale.x = -transform.scale.x.abs();
+                } else {
+                    force.linear.x = 0.0;
+                }
 
-            if input_events.pressed_keys.contains(&KeyCode::Space) {
-                body.velocity.y = -5.0;
+
+                if input_events.pressed_keys.contains(&KeyCode::Space) && !input_events.repeated_keys.contains(&KeyCode::Space) {
+                    force.linear.y = 180.0;
+                }
+
+
+                rigid_body.apply_force(0, &force, ForceType::VelocityChange, false);
             }
         }
     }
@@ -236,30 +115,32 @@ pub struct PhysicsSystem;
 impl<'a> System<'a> for PhysicsSystem {
     type SystemData = (
         WriteStorage<'a, Transform>,
-        WriteStorage<'a, DynamicBody>,
-        ReadStorage<'a, StaticBody>,
+        ReadStorage<'a, Body>,
+        Write<'a, PhysicsWorld>,
+        WriteStorage<'a, Animation>
     );
 
-    fn run(&mut self, (mut transforms, mut body_storage, static_body_storage): Self::SystemData) {
-        let mut boxes = Vec::new();
-        for (transform, body) in (&transforms, &static_body_storage).join() {
-            let bounding_box = body.get_bounding_box(transform);
+    fn run(&mut self, (mut transform_storage, body_storage, mut physics_world, mut animation_storage): Self::SystemData) {
+        physics_world.step();
 
-            boxes.push(bounding_box);
-        }
+        for (transform, body, animation) in (&mut transform_storage, &body_storage, (&mut animation_storage).maybe()).join() {
+            let rigid_body = physics_world.bodies.get(body.rigid_body_handle);
+            if let Some(rigid_body) = rigid_body {
+                let part = rigid_body.part(0).unwrap();
+                let point = nphysics2d::nalgebra::Point2::new(0.0, 0.0);
+                let iso = rigid_body.position_at_material_point(part, &point);
+                transform.position.x = iso.translation.x;
+                transform.position.y = iso.translation.y;
 
-        for (transform, body) in (&mut transforms, &mut body_storage).join() {
-            body.velocity.y += 0.2;
+                let velocity = rigid_body.velocity_at_point(0, &point);
 
-            transform.position += body.velocity;
 
-            let dynamic_bounding_box = body.get_bounding_box(transform);
-
-            for bounding_box in boxes.iter() {
-                if dynamic_bounding_box.overlaps(bounding_box) {
-                    body.velocity.y = 0.0;
-
-                    transform.position.y = bounding_box.top();
+                if let Some(animation) = animation {
+                    if velocity.linear.x != 0.0 {
+                        animation.current_state = AnimationStates::Moving;
+                    } else {
+                        animation.current_state = AnimationStates::Idle;
+                    }
                 }
             }
         }
@@ -277,7 +158,28 @@ impl<'a> System<'a> for CameraSystem {
 
     fn run(&mut self, (transform_storage, mut camera, camera_target_flag): Self::SystemData) {
         for (transform, _) in (&transform_storage, &camera_target_flag).join() {
-            camera.set_target(transform.position);
+            camera.set_target(&transform.position);
+        }
+    }
+}
+
+
+pub struct AnimationSystem;
+
+impl<'a> System<'a> for AnimationSystem {
+    type SystemData = (
+        WriteStorage<'a, Animation>,
+        WriteStorage<'a, Sprite>
+    );
+
+    fn run(&mut self, (mut animation_storage, mut sprite_storage): Self::SystemData) {
+        for (animation, sprite) in (&mut animation_storage, &mut sprite_storage).join() {
+            let current_state = animation.animations.get_mut(&animation.current_state);
+
+            if let Some(animation_params) = current_state {
+                animation_params.frame += (animation_params.speed * 1.0 / TARGET_FPS as f32) as f32;
+                sprite.src.x = sprite.src.w * ((animation_params.frame.floor() % animation_params.frame_count as f32) + animation_params.start_frame as f32);
+            }
         }
     }
 }

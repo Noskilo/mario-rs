@@ -45,8 +45,8 @@ impl Camera {
         Ok(())
     }
 
-    pub fn set_target(&mut self, position: Point2<f32>) {
-        self.target_position = position;
+    pub fn set_target(&mut self, position: &Point2<f32>) {
+        self.target_position = position.clone();
     }
 
     pub fn set_zoom(&mut self, zoom: f32) {
