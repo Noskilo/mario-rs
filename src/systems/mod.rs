@@ -1,4 +1,4 @@
-use crate::components::{Sprite, Animation, AnimationStates};
+use crate::components::{Animation, AnimationStates, Sprite};
 use crate::components::{Body, CameraTarget, Player, Transform};
 use crate::engine::{
     camera::Camera,
@@ -6,12 +6,17 @@ use crate::engine::{
     physics::PhysicsWorld,
     resources::{DebugRenderables, DeltaTime, InputEvents, Renderables},
 };
-use ggez::{event::KeyCode, graphics, graphics::MeshBuilder, nalgebra::{Point2, Vector2}, Context};
+use ggez::{
+    event::KeyCode,
+    graphics,
+    graphics::MeshBuilder,
+    nalgebra::{Point2, Vector2},
+    Context,
+};
+use nphysics2d::algebra::{Force2, ForceType, Velocity2};
 use specs::prelude::*;
 use specs::{world::Index, Read, ReadStorage, System, Write, WriteStorage};
-use nphysics2d::algebra::{Force2, ForceType, Velocity2};
 use std::f32::consts::PI;
-
 
 pub struct RenderingSystem<'a> {
     ctx: &'a mut Context,
@@ -49,10 +54,8 @@ impl<'a> System<'a> for RenderingSystem<'a> {
                 .src(sprite.src)
                 .scale(Vector2::new(transform.scale.x, transform.scale.y))
                 .dest(Point2::new(
-                    (transform.position.x - camera.position.x)
-                        + width / (2.0 * camera.zoom),
-                    (-transform.position.y + camera.position.y)
-                        + height / (2.0 * camera.zoom),
+                    (transform.position.x - camera.position.x) + width / (2.0 * camera.zoom),
+                    (-transform.position.y + camera.position.y) + height / (2.0 * camera.zoom),
                 ))
                 .offset(Point2::new(0.5, 0.5))
                 .rotation(transform.rotation);
@@ -70,7 +73,7 @@ impl<'a> System<'a> for PlayerControlSystem {
         Read<'a, InputEvents>,
         ReadStorage<'a, Player>,
         ReadStorage<'a, Body>,
-        Write<'a, PhysicsWorld>
+        Write<'a, PhysicsWorld>,
     );
 
     fn run(
@@ -98,11 +101,11 @@ impl<'a> System<'a> for PlayerControlSystem {
                     force.linear.x = 0.0;
                 }
 
-
-                if input_events.pressed_keys.contains(&KeyCode::Space) && !input_events.repeated_keys.contains(&KeyCode::Space) {
+                if input_events.pressed_keys.contains(&KeyCode::Space)
+                    && !input_events.repeated_keys.contains(&KeyCode::Space)
+                {
                     force.linear.y = 180.0;
                 }
-
 
                 rigid_body.apply_force(0, &force, ForceType::VelocityChange, false);
             }
@@ -117,13 +120,22 @@ impl<'a> System<'a> for PhysicsSystem {
         WriteStorage<'a, Transform>,
         ReadStorage<'a, Body>,
         Write<'a, PhysicsWorld>,
-        WriteStorage<'a, Animation>
+        WriteStorage<'a, Animation>,
     );
 
-    fn run(&mut self, (mut transform_storage, body_storage, mut physics_world, mut animation_storage): Self::SystemData) {
+    fn run(
+        &mut self,
+        (mut transform_storage, body_storage, mut physics_world, mut animation_storage): Self::SystemData,
+    ) {
         physics_world.step();
 
-        for (transform, body, animation) in (&mut transform_storage, &body_storage, (&mut animation_storage).maybe()).join() {
+        for (transform, body, animation) in (
+            &mut transform_storage,
+            &body_storage,
+            (&mut animation_storage).maybe(),
+        )
+            .join()
+        {
             let rigid_body = physics_world.bodies.get(body.rigid_body_handle);
             if let Some(rigid_body) = rigid_body {
                 let part = rigid_body.part(0).unwrap();
@@ -134,10 +146,16 @@ impl<'a> System<'a> for PhysicsSystem {
 
                 let velocity = rigid_body.velocity_at_point(0, &point);
 
-
                 if let Some(animation) = animation {
-                    if velocity.linear.x != 0.0 {
+                    if false {
+                        animation.current_state = AnimationStates::Jumping;
+                    } else if (velocity.linear.x < 0.0 && transform.scale.x > 0.0)
+                        || (velocity.linear.x > 0.0 && transform.scale.x < 0.0)
+                    {
+                        animation.current_state = AnimationStates::Drag;
+                    } else if velocity.linear.x.abs() > 20.0 {
                         animation.current_state = AnimationStates::Moving;
+                        animation.speed = 0.1 * velocity.linear.x.abs();
                     } else {
                         animation.current_state = AnimationStates::Idle;
                     }
@@ -163,22 +181,24 @@ impl<'a> System<'a> for CameraSystem {
     }
 }
 
-
 pub struct AnimationSystem;
 
 impl<'a> System<'a> for AnimationSystem {
-    type SystemData = (
-        WriteStorage<'a, Animation>,
-        WriteStorage<'a, Sprite>
-    );
+    type SystemData = (WriteStorage<'a, Animation>, WriteStorage<'a, Sprite>);
 
     fn run(&mut self, (mut animation_storage, mut sprite_storage): Self::SystemData) {
         for (animation, sprite) in (&mut animation_storage, &mut sprite_storage).join() {
             let current_state = animation.animations.get_mut(&animation.current_state);
 
             if let Some(animation_params) = current_state {
-                animation_params.frame += (animation_params.speed * 1.0 / TARGET_FPS as f32) as f32;
-                sprite.src.x = sprite.src.w * ((animation_params.frame.floor() % animation_params.frame_count as f32) + animation_params.start_frame as f32);
+                animation_params.frame += (animation.speed * 1.0 / TARGET_FPS as f32) as f32;
+                sprite.src.x = sprite.src.w
+                    * ((animation_params.frame.floor() % animation_params.frame_count as f32)
+                        + animation_params.start_frame as f32);
+
+                if animation_params.frame.floor() > animation_params.frame_count as f32 {
+                    animation_params.frame = animation_params.start_frame as f32;
+                }
             }
         }
     }

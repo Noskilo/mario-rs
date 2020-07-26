@@ -46,6 +46,7 @@ impl Component for Sprite {
 pub struct Animation {
     pub current_state: AnimationStates,
     pub animations: HashMap<AnimationStates, AnimationParams>,
+    pub speed: f32,
 }
 
 impl Component for Animation {
@@ -55,7 +56,6 @@ impl Component for Animation {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AnimationParams {
     pub frame: f32,
-    pub speed: f32,
     pub start_frame: u32,
     pub frame_count: u32,
 }
@@ -65,6 +65,7 @@ pub enum AnimationStates {
     Idle,
     Moving,
     Jumping,
+    Drag
 }
 
 impl Default for AnimationStates {
