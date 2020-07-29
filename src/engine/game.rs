@@ -1,20 +1,23 @@
-use super::{physics::PhysicsWorld, scene_manager::Scene};
+use ggez::{
+    Context,
+    event::EventHandler,
+    GameResult,
+    graphics, nalgebra::{Point2, Vector2}, timer,
+};
+use graphics::{FilterMode, Rect};
+use specs::{Builder, DispatcherBuilder, World, WorldExt};
+
 use crate::{
-    components::{CameraTarget, Body, Player, Sprite, Transform},
+    components::{Body, CameraTarget, Player, Sprite, Transform},
     engine::scene_manager::SceneManager,
     entities::{Brick, Mario},
     systems::{CameraSystem, PhysicsSystem, PlayerControlSystem},
 };
-use ggez::{
-    event::EventHandler,
-    graphics,
-    nalgebra::{Point2, Vector2},
-    timer, Context, GameResult,
-};
-use graphics::{FilterMode, Rect};
-use specs::{Builder, DispatcherBuilder, World, WorldExt};
-use crate::components::{FeetSensor, Animation};
-use crate::systems::AnimationSystem;
+use crate::components::{Animation, FeetSensor, Jumper, BasicAI};
+use crate::systems::{AnimationSystem, EnemySystem};
+
+use super::{physics::PhysicsWorld, scene_manager::Scene};
+use crate::entities::KoopaTroopa;
 
 pub const TARGET_FPS: u32 = 60;
 
@@ -35,19 +38,24 @@ impl<'a, 'b> SuperMario<'a, 'b> {
         world.register::<Player>();
         world.register::<Animation>();
         world.register::<FeetSensor>();
+        world.register::<Jumper>();
+        world.register::<BasicAI>();
 
 
         Mario::add(&mut world, Point2::new(0.0, 0.0), &mut physics_world);
+        KoopaTroopa::add(&mut world, Point2::new(32.0, 0.0) , &mut physics_world);
 
-        for i in 0..20 {
-            Brick::add(&mut world, Point2::new(i as f32 * 16.0, -32.0), &mut physics_world);
+        for i in 0..1 {
+            Brick::add(&mut world, Point2::new(i as f32 * 7.0 * 16.0, (i + 1) as f32 * -32.0), nphysics2d::nalgebra::base::Vector2::new(30, 2), &mut physics_world);
         }
+      
 
         let dispatcher = DispatcherBuilder::new()
             .with(PlayerControlSystem, "PlayerControlSystem", &[])
             .with(PhysicsSystem, "PhysicsSystem", &["PlayerControlSystem"])
             .with(AnimationSystem, "AnimationSystem", &[])
             .with(CameraSystem, "CameraSystem", &[])
+            .with(EnemySystem, "EnemySystem", &[])
             .build();
         let first_scene = Scene::new(world, dispatcher, physics_world);
 

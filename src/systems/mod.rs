@@ -1,4 +1,22 @@
-use crate::components::{Animation, AnimationStates, Sprite};
+use std::f32::consts::PI;
+
+use ggez::{
+    Context,
+    event::KeyCode,
+    graphics,
+    graphics::MeshBuilder,
+    nalgebra::{Point2, Vector2},
+};
+use ggez::input::keyboard::KeyMods;
+use nphysics2d::algebra::{Force2, ForceType, Velocity2};
+use nphysics2d::material::BasicMaterial;
+use nphysics2d::nalgebra::Isometry2;
+use nphysics2d::ncollide2d::query::Proximity;
+use specs::{Read, ReadStorage, System, world::Index, Write, WriteStorage};
+use specs::hibitset::BitSetLike;
+use specs::prelude::*;
+
+use crate::components::{Animation, AnimationStates, Jumper, Sprite, BasicAI};
 use crate::components::{Body, CameraTarget, FeetSensor, Player, Transform};
 use crate::engine::{
     camera::Camera,
@@ -6,19 +24,6 @@ use crate::engine::{
     physics::PhysicsWorld,
     resources::{DebugRenderables, DeltaTime, InputEvents, Renderables},
 };
-use ggez::{
-    event::KeyCode,
-    graphics,
-    graphics::MeshBuilder,
-    nalgebra::{Point2, Vector2},
-    Context,
-};
-use nphysics2d::algebra::{Force2, ForceType, Velocity2};
-use specs::prelude::*;
-use specs::{world::Index, Read, ReadStorage, System, Write, WriteStorage};
-use std::f32::consts::PI;
-use specs::hibitset::BitSetLike;
-use nphysics2d::ncollide2d::query::Proximity;
 
 pub struct RenderingSystem<'a> {
     ctx: &'a mut Context,
@@ -52,17 +57,23 @@ impl<'a> System<'a> for RenderingSystem<'a> {
         let (width, height) = graphics::size(self.ctx);
 
         for (sprite, transform) in (&sprite_storage, &transform_storage).join() {
-            let draw_param = graphics::DrawParam::new()
-                .src(sprite.src)
-                .scale(Vector2::new(transform.scale.x, transform.scale.y))
-                .dest(Point2::new(
-                    (transform.position.x - camera.position.x) + width / (2.0 * camera.zoom),
-                    (-transform.position.y + camera.position.y) + height / (2.0 * camera.zoom),
-                ))
-                .offset(Point2::new(0.5, 0.5))
-                .rotation(transform.rotation);
+            for count_x in 0..sprite.repeat.x {
+                for count_y in 0..sprite.repeat.y {
+                    let pos_x = transform.position.x + count_x as f32 * sprite.width;
+                    let pos_y = -transform.position.y + count_y as f32 * sprite.height;
+                    let draw_param = graphics::DrawParam::new()
+                        .src(sprite.src)
+                        .scale(Vector2::new(transform.scale.x, transform.scale.y))
+                        .dest(Point2::new(
+                            (pos_x - camera.position.x) + width / (2.0 * camera.zoom),
+                            (pos_y + camera.position.y) + height / (2.0 * camera.zoom),
+                        ))
+                        .offset(Point2::new(0.5, 0.5))
+                        .rotation(transform.rotation);
 
-            renderables.0.push_back(draw_param);
+                    renderables.0.push_back(draw_param);
+                }
+            }
         }
     }
 }
@@ -76,54 +87,120 @@ impl<'a> System<'a> for PlayerControlSystem {
         ReadStorage<'a, Player>,
         ReadStorage<'a, Body>,
         Write<'a, PhysicsWorld>,
-        ReadStorage<'a, FeetSensor>
+        ReadStorage<'a, FeetSensor>,
+        WriteStorage<'a, Jumper>,
+        WriteStorage<'a, Animation>,
     );
 
     fn run(
         &mut self,
-        (mut transform_storage, input_events, player, body_storage, mut physics_world, feet_sensor_storage): Self::SystemData,
+        (
+            mut transform_storage,
+            input_events,
+            player,
+            body_storage,
+            mut physics_world,
+            feet_sensor_storage,
+            mut jumper_storage,
+            mut animation_storage,
+        ): Self::SystemData,
     ) {
         let center_point = nphysics2d::nalgebra::Point2::new(0.0, 0.0);
-        let speed = (300.0 * 1.0 / TARGET_FPS as f32) as f32;
+        let accel = (400.0 * 1.0 / TARGET_FPS as f32) as f32;
         let mut force = Force2::linear(nphysics2d::nalgebra::Vector2::new(0.0, 0.0));
-        let top_speed = 150.0;
+        let mut top_speed = 100.0;
+        let mut friction = 0.5;
 
-        for (transform, body, p, feet_sensor) in (&mut transform_storage, &body_storage, &player, (&feet_sensor_storage).maybe()).join() {
-            let mut rigid_body = physics_world.bodies.get_mut(body.rigid_body_handle);
+        if input_events.is_mod_active(KeyMods::SHIFT) {
+            top_speed = 240.0;
+        }
+
+        for (transform, body, _, feet_sensor, jumper, animation) in (
+            &mut transform_storage,
+            &body_storage,
+            &player,
+            (&feet_sensor_storage).maybe(),
+            (&mut jumper_storage).maybe(),
+            (&mut animation_storage).maybe(),
+        )
+            .join()
+        {
+            let rigid_body = physics_world.bodies.get(body.rigid_body_handle);
+
             if let Some(rigid_body) = rigid_body {
-
                 let current_velocity = rigid_body.velocity_at_point(0, &center_point);
 
                 if let Some(feet_sensor) = feet_sensor {
-                    if input_events.pressed_keys.contains(&KeyCode::D)
-                        || input_events.pressed_keys.contains(&KeyCode::Right)
+                    if input_events.is_key_pressed(&KeyCode::D)
+                        || input_events.is_key_pressed(&KeyCode::Right)
                     {
                         if current_velocity.linear.x < top_speed {
-                            force.linear.x = speed;
+                            force.linear.x = accel;
                         }
 
                         transform.scale.x = transform.scale.x.abs();
-                    } else if input_events.pressed_keys.contains(&KeyCode::A)
-                        || input_events.pressed_keys.contains(&KeyCode::Left)
+                        friction = 0.0;
+                    } else if input_events.is_key_pressed(&KeyCode::A)
+                        || input_events.is_key_pressed(&KeyCode::Left)
                     {
                         if current_velocity.linear.x > -top_speed {
-                            force.linear.x = -speed;
+                            force.linear.x = -accel;
                         }
 
                         transform.scale.x = -transform.scale.x.abs();
-                    } else {
-                        force.linear.x = 0.0;
+                        friction = 0.0;
                     }
 
-                    if input_events.pressed_keys.contains(&KeyCode::Space)
-                        && !input_events.repeated_keys.contains(&KeyCode::Space) && feet_sensor.on_floor
-                    {
-                        force.linear.y = 210.0;
+                    if let Some(jumper) = jumper {
+                        if feet_sensor.on_floor {
+                            jumper.jump_active = true;
+                        }
+
+                        if input_events.is_key_pressed(&KeyCode::Space) {
+                            if jumper.jump_active {
+                                let hold_time = input_events
+                                    .key_hold_time(&KeyCode::Space)
+                                    .unwrap()
+                                    .elapsed()
+                                    .as_secs_f32();
+
+                                let mut jump_time = 0.2;
+
+                                if input_events.is_mod_active(KeyMods::SHIFT) {
+                                    jump_time = 0.24;
+                                }
+
+                                if hold_time < jump_time {
+                                    if let Some(animation) = animation {
+                                        animation.current_state = AnimationStates::Jumping;
+                                    }
+
+                                    force.linear.y = 40.0 * ((jump_time - hold_time) / jump_time);
+                                    friction = 0.0;
+                                }
+                            }
+                        } else {
+                            jumper.jump_active = false;
+                        }
                     }
                 }
+            }
 
+            if force.linear.magnitude() > 0.0 {
+                let rigid_body = physics_world.bodies.get_mut(body.rigid_body_handle);
+                if let Some(rigid_body) = rigid_body {
+                    rigid_body.apply_force(0, &force, ForceType::Impulse, true);
+                }
+            }
 
-                rigid_body.apply_force(0, &force, ForceType::Impulse, false);
+            let collider = physics_world.colliders.get_mut(body.collider_handle);
+
+            if let Some(collider) = collider {
+                let material = collider.material_mut().downcast_mut::<BasicMaterial<f32>>();
+
+                if let Some(material) = material {
+                    material.friction = friction;
+                }
             }
         }
     }
@@ -164,9 +241,11 @@ impl<'a> System<'a> for PhysicsSystem {
             if let Some(rigid_body) = rigid_body {
                 let part = rigid_body.part(0).unwrap();
                 let point = nphysics2d::nalgebra::Point2::new(0.0, 0.0);
-                let iso = rigid_body.position_at_material_point(part, &point);
+                let iso: Isometry2<f32> = rigid_body.position_at_material_point(part, &point);
                 transform.position.x = iso.translation.x;
                 transform.position.y = iso.translation.y;
+
+                transform.rotation = iso.rotation.angle();
 
                 let velocity = rigid_body.velocity_at_point(0, &point);
 
@@ -174,20 +253,22 @@ impl<'a> System<'a> for PhysicsSystem {
                     let on_floor = match feet_sensor {
                         Some(feet) => {
                             let mut feet_grounded = false;
-                            let contacts = physics_world.geometrical_world.colliders_interacting_with(&physics_world.colliders, feet.collider_handle);
+                            let contacts =
+                                physics_world.geometrical_world.colliders_interacting_with(
+                                    &physics_world.colliders,
+                                    feet.collider_handle,
+                                );
 
-                            for (handle, collider) in contacts.unwrap() {
+                            for (_, collider) in contacts.unwrap() {
                                 if let Some(user_data) = collider.user_data() {
                                     feet_grounded = match user_data.downcast_ref::<&str>() {
-                                        Some(&"brick") => {
-                                            true
-                                        }
-                                        _ => {
-                                            false
-                                        }
+                                        Some(&"brick") => true,
+                                        _ => false,
                                     };
 
-                                    if feet_grounded { break; }
+                                    if feet_grounded {
+                                        break;
+                                    }
                                 }
                             }
 
@@ -198,18 +279,19 @@ impl<'a> System<'a> for PhysicsSystem {
                         None => false,
                     };
 
+                    let drag_threshold = 10.0;
 
-                    if !on_floor {
-                        animation.current_state = AnimationStates::Jumping;
-                    } else if (velocity.linear.x < 0.0 && transform.scale.x > 0.0)
-                        || (velocity.linear.x > 0.0 && transform.scale.x < 0.0)
-                    {
-                        animation.current_state = AnimationStates::Drag;
-                    } else if velocity.linear.x.abs() > 20.0 {
-                        animation.current_state = AnimationStates::Moving;
-                        animation.speed = 0.1 * velocity.linear.x.abs();
-                    } else {
-                        animation.current_state = AnimationStates::Idle;
+                    if on_floor {
+                        if (velocity.linear.x < -drag_threshold && transform.scale.x > 0.0)
+                            || (velocity.linear.x > drag_threshold && transform.scale.x < 0.0)
+                        {
+                            animation.current_state = AnimationStates::Drag;
+                        } else if velocity.linear.x.abs() > 20.0 {
+                            animation.current_state = AnimationStates::Moving;
+                            animation.speed = animation.speed_factor * velocity.linear.x.abs();
+                        } else {
+                            animation.current_state = AnimationStates::Idle;
+                        }
                     }
                 }
             }
@@ -248,9 +330,37 @@ impl<'a> System<'a> for AnimationSystem {
                     * ((animation_params.frame.floor() % animation_params.frame_count as f32)
                     + animation_params.start_frame as f32);
 
-                if animation_params.frame.floor() > animation_params.frame_count as f32 {
+                if animation_params.frame >= (animation_params.frame_count + animation_params.start_frame) as f32 {
                     animation_params.frame = animation_params.start_frame as f32;
                 }
+            }
+        }
+    }
+}
+
+pub struct EnemySystem;
+
+impl<'a> System<'a> for EnemySystem {
+    type SystemData = (ReadStorage<'a, BasicAI>, ReadStorage<'a, FeetSensor>, WriteStorage<'a, Body>, Write<'a, PhysicsWorld>);
+
+    fn run(&mut self, (basic_ai_storage, feet_sensor_storage, mut body_storage, mut physics_world): Self::SystemData) {
+        let center_point = nphysics2d::nalgebra::Point2::new(0.0, 0.0);
+        let mut force = Force2::linear(nphysics2d::nalgebra::Vector2::new(0.0, 0.0));
+        let mut top_speed = 50.0;
+        let accel = (10000.0 * 1.0 / TARGET_FPS as f32) as f32;
+
+
+        for (feet_sensor, _, body) in (&feet_sensor_storage, &basic_ai_storage, &mut body_storage).join() {
+
+            let mut rigid_body = physics_world.bodies.get_mut(body.rigid_body_handle);
+            if let Some(rigid_body) = rigid_body {
+                let current_velocity = rigid_body.velocity_at_point(0, &center_point);
+
+                if current_velocity.linear.x < top_speed {
+                    force.linear.x = accel;
+                }
+
+                rigid_body.apply_force(0, &force, ForceType::Impulse, true);
             }
         }
     }

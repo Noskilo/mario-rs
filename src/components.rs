@@ -1,14 +1,13 @@
-use ggez::{
-    graphics,
-    nalgebra::{Point2},
-};
-use nphysics2d::nalgebra::base::Vector2;
-use specs::Component;
-use specs::{NullStorage, VecStorage};
-
-use nphysics2d::object::{DefaultBodyHandle, DefaultColliderHandle};
 use std::collections::HashMap;
 
+use ggez::{
+    graphics,
+    nalgebra::Point2,
+};
+use nphysics2d::nalgebra::base::Vector2;
+use nphysics2d::object::{DefaultBodyHandle, DefaultColliderHandle};
+use specs::{NullStorage, VecStorage};
+use specs::Component;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Body {
@@ -30,6 +29,15 @@ impl Component for FeetSensor {
     type Storage = VecStorage<Self>;
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Jumper {
+    pub jump_active: bool,
+}
+
+impl Component for Jumper {
+    type Storage = VecStorage<Self>;
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Transform {
     pub position: Point2<f32>,
@@ -46,6 +54,7 @@ pub struct Sprite {
     pub src: graphics::Rect,
     pub width: f32,
     pub height: f32,
+    pub repeat: Vector2<u32>
 }
 
 impl Component for Sprite {
@@ -57,6 +66,7 @@ pub struct Animation {
     pub current_state: AnimationStates,
     pub animations: HashMap<AnimationStates, AnimationParams>,
     pub speed: f32,
+    pub speed_factor: f32,
 }
 
 impl Component for Animation {
@@ -96,5 +106,13 @@ impl Component for CameraTarget {
 pub struct Player;
 
 impl Component for Player {
+    type Storage = NullStorage<Self>;
+}
+
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct BasicAI;
+
+impl Component for BasicAI {
     type Storage = NullStorage<Self>;
 }

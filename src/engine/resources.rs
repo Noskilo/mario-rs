@@ -1,8 +1,10 @@
+use std::collections::{HashMap, HashSet, vec_deque::VecDeque};
+use std::time::{Duration, Instant};
+
 use ggez::{
     event::{KeyCode, KeyMods},
-    graphics::{Mesh, DrawParam},
+    graphics::{DrawParam, Mesh},
 };
-use std::collections::{vec_deque::VecDeque, HashSet};
 
 #[derive(Default)]
 pub struct DeltaTime(pub f64);
@@ -15,9 +17,8 @@ pub struct DebugRenderables(pub VecDeque<Mesh>);
 
 #[derive(Default)]
 pub struct InputEvents {
-    pub pressed_keys: HashSet<KeyCode>,
+    pub pressed_keys: HashMap<KeyCode, Instant>,
     pub active_mods: KeyMods,
-    pub repeated_keys: HashSet<KeyCode>,
 }
 
 impl InputEvents {
@@ -25,8 +26,15 @@ impl InputEvents {
         self.active_mods.contains(keymods)
     }
 
-    pub fn is_key_pressed(&self, key: KeyCode) -> bool {
-        self.pressed_keys.contains(&key)
+    pub fn is_key_pressed(&self, key: &KeyCode) -> bool {
+        self.pressed_keys.contains_key(key)
+    }
+
+    pub fn key_hold_time(&self, key: &KeyCode) -> Option<&Instant> {
+        self.pressed_keys.get(key)
+    }
+
+    pub fn is_key_just_pressed(&self, key: &KeyCode) -> bool {
+        self.is_key_pressed(key) && self.key_hold_time(key).unwrap().elapsed().as_millis() < 100
     }
 }
-// pub struct InputEvents(pub Vec<Event>, pub Vec<Keycode>);

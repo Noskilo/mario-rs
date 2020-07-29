@@ -1,7 +1,3 @@
-use crate::components::Body;
-use nphysics2d::object::{
-    BodyPartHandle, Collider, ColliderDesc, DefaultBodyHandle, DefaultColliderHandle, RigidBodyDesc,
-};
 use nphysics2d::{
     force_generator::DefaultForceGeneratorSet,
     joint::DefaultJointConstraintSet,
@@ -10,6 +6,11 @@ use nphysics2d::{
     object::{DefaultBodySet, DefaultColliderSet, RigidBody},
     world::{DefaultGeometricalWorld, DefaultMechanicalWorld},
 };
+use nphysics2d::object::{
+    BodyPartHandle, Collider, ColliderDesc, DefaultBodyHandle, DefaultColliderHandle, RigidBodyDesc,
+};
+
+use crate::components::Body;
 
 pub struct PhysicsWorld {
     mechanical_world: DefaultMechanicalWorld<f32>,
@@ -59,7 +60,7 @@ impl PhysicsWorld {
 
 impl Default for PhysicsWorld {
     fn default() -> Self {
-        let mechanical_world = DefaultMechanicalWorld::new(Vector2::new(0.0, -300.0));
+        let mechanical_world = DefaultMechanicalWorld::new(Vector2::new(0.0, -450.0));
         let geometrical_world = DefaultGeometricalWorld::new();
 
         let bodies = DefaultBodySet::new();

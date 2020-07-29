@@ -1,12 +1,13 @@
+use std::collections::VecDeque;
+
 use ggez::{
-    graphics::{self, spritebatch::SpriteBatch},
-    nalgebra::{Point2, Vector2},
-    Context, GameResult,
+    Context,
+    GameResult,
+    graphics::{self, spritebatch::SpriteBatch}, nalgebra::{Point2, Vector2},
 };
+use graphics::{DrawParam, Mesh};
 
 use crate::util::lerp::Lerp;
-use graphics::{DrawParam, Mesh};
-use std::collections::VecDeque;
 
 pub struct Camera {
     pub position: Point2<f32>,

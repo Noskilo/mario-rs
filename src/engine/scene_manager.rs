@@ -1,22 +1,25 @@
+use std::time::{Duration, Instant};
+
+use ggez::{
+    Context,
+    event::KeyCode,
+    graphics::{self, MeshBuilder, spritebatch::SpriteBatch},
+    input::keyboard,
+    nalgebra::Point2, timer,
+};
+use ggez::error::GameResult;
+use graphics::DrawParam;
+use specs::{Dispatcher, Join};
+use specs::{RunNow, World, WorldExt};
+
+use crate::components::Body;
+use crate::systems::RenderingSystem;
+
 use super::{
     camera::Camera,
     physics::PhysicsWorld,
     resources::{DebugRenderables, DeltaTime, InputEvents, Renderables},
 };
-use ggez::error::GameResult;
-
-use crate::systems::RenderingSystem;
-use ggez::{
-    event::KeyCode,
-    graphics::{self, spritebatch::SpriteBatch, MeshBuilder},
-    input::keyboard,
-    nalgebra::Point2,
-    timer, Context,
-};
-use graphics::DrawParam;
-use specs::{Dispatcher, Join};
-use specs::{RunNow, World, WorldExt};
-use crate::components::Body;
 
 pub struct SceneManager<'a, 'b> {
     scenes: Vec<Box<Scene<'a, 'b>>>,
@@ -59,7 +62,7 @@ impl<'a, 'b> Scene<'a, 'b> {
     pub fn new(
         mut world: World,
         mut dispatcher: Dispatcher<'a, 'b>,
-        mut physics_world: PhysicsWorld,
+        physics_world: PhysicsWorld,
     ) -> Self {
         world.insert(DeltaTime(0.0));
         world.insert(Renderables::default());
@@ -85,9 +88,25 @@ impl<'a, 'b> Scene<'a, 'b> {
 
             cam.update();
 
-            input_events.repeated_keys = input_events.pressed_keys.clone();
             input_events.active_mods = keyboard::active_mods(ctx);
-            input_events.pressed_keys = keyboard::pressed_keys(ctx).clone();
+
+            for key in keyboard::pressed_keys(ctx).iter() {
+                if !input_events.pressed_keys.contains_key(key) {
+                    input_events.pressed_keys.insert(*key, Instant::now());
+                }
+            }
+
+            let mut keys_to_delete = Vec::new();
+
+            for (key, _) in input_events.pressed_keys.iter() {
+                if !keyboard::is_key_pressed(ctx, *key) {
+                    keys_to_delete.push(*key);
+                }
+            }
+
+            for key in keys_to_delete.iter() {
+                input_events.pressed_keys.remove(key);
+            }
         }
 
         self.dispatcher.dispatch(&self.world);
